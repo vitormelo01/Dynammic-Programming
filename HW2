@@ -1,0 +1,356 @@
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pdb
+from scipy.optimize import root
+
+a = 1
+theta = 0.4
+beta = 0.96
+delta = 0.1
+alpha = 1
+
+def steady_state():
+    Hss = 1/(1+alpha/(1-theta)-alpha*theta*delta/(1-theta)/(1/beta+delta-1))
+    Kss = Hss*(a*theta/(1/beta+delta-1))**(1/(1-theta))
+    Css = Kss*((1/beta+delta-1)/theta-delta)
+    return Css, Kss, Hss
+
+
+def search_H0(Cl, Ch, Css, Kss, Hss):
+    C0 = (Cl+Ch)/2
+    K0 = Kss/2
+
+    Temp = alpha*C0/a/(1-theta)/(K0**theta)
+#    print('Temp=',Temp)
+    H0 = 0.0001
+    for t in range (10000):
+        Result = (1-H0)*(H0**(-theta))
+        if abs(Result-Temp)<0.0001:
+#            H0=Result
+#            print ('H0 initial =',H0)
+#            print ('Result=',Result)
+            break    
+        else:
+            H0 +=0.0001
+    return H0, Cl, Ch
+
+
+def search_H0_up(Cl, Ch, Css, Kss, Hss):
+    C0 = (Cl+Ch)/2
+    K0 = Kss*2
+    
+    Temp = alpha*C0/a/(1-theta)/(K0**theta)
+#    print('Temp=',Temp)
+    H0 = 0.0001
+    for t in range (10000):
+        Result = (1-H0)*(H0**(-theta))
+        if abs(Result-Temp)<0.001:
+#            H0=Result
+#            print ('H0_up=',H0)
+#            print ('Result=',Result)
+            break    
+        else:
+            H0 +=0.0001
+    return H0, Cl, Ch
+
+
+def cycle_above(Cl,Ch,Css,Kss,H0):    
+    C = [0 for n in range(200)]
+    C[0] = (Cl+Ch)/2
+    K = [0 for n in range(200)]
+    K[0] = Kss*2
+    H = [0 for n in range(200)]
+    H[0] = H0
+    
+    for t in range(2):
+        C[t+1] = C[t]*beta*((K[t]**(theta-1))*(H[t]**(1-theta))*a*theta+1-delta) 
+        K[t+1] = (1-delta)*K[t]+a*(K[t]**theta)*(H[t]**(1-theta))-C[t]
+#        H[t+1] = 1/(1+(alpha*C[t+1]+theta)/(1-theta)/K[t+1]/(K[t]**theta)/(H[t]**(1-theta)))
+        H[t+1] = 1 - alpha*C[t]/a/(1-theta)/(K[t]**theta)/(H[t]**(-theta))
+#        print('C[',t,'+1]',C[t+1])
+#        print('K[',t,'+1]',K[t+1])
+#        print('H[',t,'+1]',H[t+1])
+
+#        if abs(C[t]-Css)<0.0001 and abs(K[t]-Kss)<0.0001:
+        if abs(C[t]-Css)<0.0001:
+            flag = 0
+            break
+        elif C[t]<Css and abs(K[t]-Kss)>0.0001:
+#        elif C[t]<Css :
+            flag = 1
+            break
+        elif K[t]<Kss and abs(C[t]-Css)>0.0001:
+#        elif K[t]<Kss :
+            flag = 2
+            break
+    return C,K,H,flag,t
+
+
+def isComplex(n):    
+    m=type(n)    
+    if  m==type(1+1j):       
+        return True    
+    else:       
+        return False
+   
+
+def search_C_and_H(C_t, K_t_1):
+    #    print('Temp=',Temp)
+    H_t_11 = [0 for n in range(10000)]
+    H_t_1 = 0.0001
+    C_t_1 = C_t
+    flg = 100
+    Temp3 = [0 for n in range(10000)]
+    for t in range (10000):
+        Temp1 = beta*C_t*(a*theta*(K_t_1**(theta-1))*(H_t_1**(1-theta))+1-delta)
+        Temp2 = (1-H_t_1)*a*(1-theta)*(K_t_1**theta)*(H_t_1**(-theta))/alpha
+#        print ('Temp1=',Temp1)
+#        print ('Temp2=',Temp2)
+        Temp3[t] = Temp2 - Temp1
+#        print ('Temp3=',Temp3[t])
+        if isComplex(Temp1):
+            print ('break here ************Temp1 small')
+            flg = 1
+            break
+        elif isComplex(Temp2):
+            print ('break here ************Temp2 small')
+            flg = 2
+            break
+        
+        elif abs(Temp1-Temp2)<0.001:
+            flg = 0
+            C_t_1 = Temp1            
+            break   
+        
+        else:
+            H_t_11[t] = Temp3[t]
+            H_t_1 +=0.0001
+            
+    if flg == 100:
+#        print ('index=',H_t_11.index(min(H_t_11)))
+#        print ('min',min(H_t_11))
+        print ('HERE')
+        H_t_1 = min(H_t_11)
+        C_t_1 = beta*C_t*(a*theta*(K_t_1**(theta-1))*(H_t_1**(1-theta))+1-delta)
+#    print ('flag',flg)
+#    pdb.set_trace()  
+    return C_t_1, H_t_1, flg
+
+
+
+
+def cycle_below(Cl,Ch,Css,Kss,H0):    
+    C = [0 for n in range(200)]
+    C[0] = (Cl+Ch)/2
+    K = [0 for n in range(200)]
+    K[0] = Kss/2
+    H = [0 for n in range(200)]
+    H[0] = H0
+    f = 0
+    for t in range(5000):
+        K[t+1] = (1-delta)*K[t]+a*(K[t]**theta)*(H[t]**(1-theta))-C[t]
+        
+        C[t+1], H[t+1], flag = search_C_and_H(C[t],K[t+1])
+        
+        if abs(C[t]-Css)<0.001: #can not reach steady state if set 0.0001
+#        if abs(K[t]-Kss)<0.001:
+            print('YES')
+            f = 0
+            break
+        elif K[t+1]<K[t] and C[t+1]>C[t]:
+#            print('C[0]too large')
+            f = 1
+            break
+#            Ch = C[0]
+        elif K[t+1]>K[t] and C[t+1]<C[t]:
+#            print('C[0]too small')
+            f = 2
+            break
+        elif K[t+1]>Kss and C[t+1]<Css:
+#            print('C[0]too small finally')
+            f = 2
+            break
+        elif C[t+1]>Css and K[t+1]<Kss:
+#            print('C[0]too large finally')
+            f = 1
+            break
+
+#    pdb.set_trace()
+    return C,K,H,f,t
+
+
+def cycle_above(Cl,Ch,Css,Kss,H0):    
+    C = [0 for n in range(200)]
+    C[0] = (Cl+Ch)/2
+    K = [0 for n in range(200)]
+    K[0] = Kss*2
+    H = [0 for n in range(200)]
+    H[0] = H0
+    f = 0
+    for t in range(5000):
+        K[t+1] = (1-delta)*K[t]+a*(K[t]**theta)*(H[t]**(1-theta))-C[t]
+        
+        C[t+1], H[t+1], flag = search_C_and_H(C[t],K[t+1])
+        
+        if abs(C[t]-Css)<0.0001: 
+            print('YES')
+            f = 0
+            break
+        elif K[t+1]<K[t] and C[t+1]>C[t]:
+#            print('C[0]too large')
+            f = 1
+            break
+#            Ch = C[0]
+        elif K[t+1]>K[t] and C[t+1]<C[t]:
+#            print('C[0]too small')
+            f = 2
+            break
+        elif K[t+1]<Kss and C[t+1]<Css:
+#            print('C[0]too small finally')
+            f = 2
+            break
+        elif C[t+1]>Css and K[t+1]<Kss:
+#            print('C[0]too large finally')
+            f = 1
+            break
+        
+    return C,K,H,f,t
+
+
+def main():
+    CSS, KSS, HSS = steady_state()
+    CL = 0
+    CH = KSS
+
+    print ('Css=',CSS)
+    print ('Kss=',KSS)
+    print ('Hss=',HSS)
+    H0, CL, CH = search_H0(CL, CH, CSS, KSS, HSS)
+#    print(type(H0))
+            
+#    while (H0 > 1):
+#        CH = C0
+#        H0, CL, CH  = search_H0(CL, CH, CSS, KSS, HSS)
+  
+    print('H0=',H0,'CL=',CL,'CH=',CH)
+#    cycle_below(Cl,Ch,Css,Kss,H0)
+#    pdb.set_trace()
+    c,k,h,fg,T = cycle_below(CL,CH,CSS,KSS,H0)
+#    c,k,h,fg,T = search_c_0(CL,CH,CSS,KSS,H0)
+#    print ('c=',c)
+#    print('flag=',fg)
+    c_array = c
+    k_array = k    
+    h_array = h
+    
+    cycle_below_times = 0
+    
+#    pdb.set_trace()
+    
+    while (fg !=0):
+        cycle_below_times = cycle_below_times +1
+        c_array = c_array + c
+        k_array = k_array + k
+        h_array = h_array + h
+        if fg ==1:
+            CH = c[0]
+            H0, CL, CH = search_H0(CL, CH, CSS, KSS, HSS)
+            c,k,h,fg,T = cycle_below(CL,CH,CSS,KSS,H0)
+        elif fg ==2:
+            CL = c[0]
+            H0, CL, CH = search_H0(CL, CH, CSS, KSS, HSS)
+            c,k,h,fg,T = cycle_below(CL,CH,CSS,KSS,H0)
+    print('cycle for searching start point below =',cycle_below_times,' times, loop to Css from below =',T,' times')
+
+    for i in range (0,len(c_array)):
+        if c_array[i] == 0:
+            c_array[i] = None 
+        if k_array[i] == 0:
+            k_array[i] = None            
+
+    c_tuple = [c_array[i:i+200] for i in range(0,len(c_array),200)]
+    k_tuple = [k_array[i:i+200] for i in range(0,len(k_array),200)]
+    h_tuple = [h_array[i:i+200] for i in range(0,len(h_array),200)]
+    
+    for i in range (0, len(c)):
+        if c[i] == 0:
+            c[i] = None
+        if k[i] == 0:
+            k[i] = None
+
+    plt.xlim((0,6))
+    plt.ylim((0,3))
+    plt.xlabel('Kt')
+    plt.ylabel('Ct')
+    plt.plot([KSS, KSS,], [0, CSS,], 'k--', linewidth=1.0)
+    plt.scatter([KSS, ], [CSS, ], s=20, color='r')
+#    print('c_tuple=',c_tuple)
+#    print('k_tuple=',k_tuple)
+#    print('h_tuple=',h_tuple)    
+    plt.plot(k,c,color='blue')
+    for i in range (len(c_tuple)):
+        plt.plot(k_tuple[i],c_tuple[i],ls='dashed')   
+        
+
+    CL = 0
+    CH = KSS    
+    c,k,h,fg,T = cycle_above(CL,CH,CSS,KSS,H0)
+#    c,k,h,fg,T = search_c_0(CL,CH,CSS,KSS,H0)
+#    print ('c=',c)
+#    print('flag=',fg)
+    c_array = c
+    k_array = k    
+    h_array = h
+    
+    cycle_above_times = 0
+    
+#    pdb.set_trace()
+    
+    while (fg !=0):
+        cycle_above_times = cycle_above_times +1
+        c_array = c_array + c
+        k_array = k_array + k
+        h_array = h_array + h
+        if fg ==1:
+            CH = c[0]
+            H0, CL, CH = search_H0_up(CL, CH, CSS, KSS, HSS)
+            c,k,h,fg,T = cycle_above(CL,CH,CSS,KSS,H0)
+        elif fg ==2:
+            CL = c[0]
+            H0, CL, CH = search_H0_up(CL, CH, CSS, KSS, HSS)
+            c,k,h,fg,T = cycle_above(CL,CH,CSS,KSS,H0)
+    print('cycle for searching start point below =',cycle_above_times,' times, loop to Css from below =',T,' times')
+
+    for i in range (0,len(c_array)):
+        if c_array[i] == 0:
+            c_array[i] = None 
+        if k_array[i] == 0:
+            k_array[i] = None            
+
+    c_tuple = [c_array[i:i+200] for i in range(0,len(c_array),200)]
+    k_tuple = [k_array[i:i+200] for i in range(0,len(k_array),200)]
+    h_tuple = [h_array[i:i+200] for i in range(0,len(h_array),200)]
+    
+    for i in range (0, len(c)):
+        if c[i] == 0:
+            c[i] = None
+        if k[i] == 0:
+            k[i] = None
+
+    plt.xlim((0,6))
+    plt.ylim((0,3))
+    plt.xlabel('Kt')
+    plt.ylabel('Ct')
+    plt.plot([KSS, KSS,], [0, CSS,], 'k--', linewidth=1.0)
+    plt.scatter([KSS, ], [CSS, ], s=20, color='r')
+#    print('c_tuple=',c_tuple)
+#    print('k_tuple=',k_tuple)
+#    print('h_tuple=',h_tuple)    
+    plt.plot(k,c,color='blue')
+    for i in range (len(c_tuple)):
+        plt.plot(k_tuple[i],c_tuple[i],ls='dashed')  
+        
+    plt.annotate('steady state\n   (Kss,Css)', xy=(2.6,0.8), xytext=(2,1.5),arrowprops=dict(facecolor='blue',arrowstyle="->"))
+    plt.annotate('  optimal path\n(Blue Solid line)', xy=(3.3, 0.7), xytext=(4.2, 0.4),arrowprops=dict(facecolor='blue',arrowstyle="->"))
+main()  
